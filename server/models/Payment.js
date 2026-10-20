@@ -34,7 +34,7 @@ const paymentSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Cash', 'UPI', 'Card', 'Bank Transfer'],
+    enum: ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Razorpay', 'NetBanking', 'Wallet'],
     required: true
   },
   paymentDate: {
@@ -46,6 +46,20 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true
+  },
+  razorpayOrderId: {
+    type: String,
+    default: null,
+    index: true
+  },
+  razorpayPaymentId: {
+    type: String,
+    default: null,
+    index: true
+  },
+  razorpaySignature: {
+    type: String,
+    default: null
   },
   invoiceNo: {
     type: String,
@@ -60,7 +74,7 @@ const paymentSchema = new mongoose.Schema({
   },
   isDemoPayment: {
     type: Boolean,
-    default: true
+    default: false
   },
   isRefunded: {
     type: Boolean,

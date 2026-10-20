@@ -36,12 +36,14 @@ export default function RegisterPage() {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
+  const [paymentMode, setPaymentMode] = useState('razorpay'); // 'razorpay' | 'simulation'
   const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [razorpayLoading, setRazorpayLoading] = useState(false);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { register } = useAuth();
+  const { register, setUser } = useAuth();
   const navigate = useNavigate();
 
   // Load plans from MongoDB
@@ -114,7 +116,115 @@ export default function RegisterPage() {
     }
   };
 
-  // Final Registration & Payment Submission
+  // Dynamic Razorpay Script Loader
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        return resolve(true);
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  // Razorpay Checkout Handler (Test Mode with Real Cryptographic Signature Verification)
+  const handleRazorpayCheckout = async () => {
+    setError('');
+    setRazorpayLoading(true);
+
+    try {
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        throw new Error('Razorpay SDK failed to load. Please verify your internet connection.');
+      }
+
+      // 1. Create order on backend with authoritative MongoDB plan price
+      const orderRes = await API.post('/payments/razorpay/create-order', {
+        planId: selectedPlan._id,
+        couponCode: appliedCoupon ? appliedCoupon.code : undefined
+      });
+
+      if (!orderRes.data.success) {
+        throw new Error(orderRes.data.message || 'Failed to initialize Razorpay order.');
+      }
+
+      const { orderId, amount, currency, keyId } = orderRes.data.data;
+
+      // 2. Configure Razorpay Checkout Modal
+      const options = {
+        key: keyId,
+        amount: amount,
+        currency: currency || 'INR',
+        name: 'GymFlow Smart Fitness',
+        description: `${selectedPlan.name} Membership (${selectedPlan.durationMonths} Months)`,
+        image: 'https://cdn-icons-png.flaticon.com/512/2964/2964514.png',
+        order_id: orderId,
+        prefill: {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          contact: phone.trim() || '9876543210'
+        },
+        theme: {
+          color: '#10b981' // GymFlow Emerald Green
+        },
+        modal: {
+          ondismiss: function () {
+            setRazorpayLoading(false);
+            setError('Payment cancelled or closed. Your membership was not activated.');
+          }
+        },
+        handler: async function (response) {
+          // 3. Verify cryptographic HMAC-SHA256 signature on backend
+          try {
+            setRazorpayLoading(true);
+            const verifyRes = await API.post('/payments/razorpay/verify', {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              planId: selectedPlan._id,
+              couponCode: appliedCoupon ? appliedCoupon.code : undefined,
+              registrationData: {
+                name: name.trim(),
+                email: email.trim().toLowerCase(),
+                phone: phone.trim(),
+                password: password
+              }
+            });
+
+            if (verifyRes.data.success) {
+              const userData = verifyRes.data.data.user;
+              setUser(userData);
+              localStorage.setItem('gymflow_user', JSON.stringify(userData));
+              navigate('/member/dashboard');
+            } else {
+              setError(verifyRes.data.message || 'Payment signature verification failed.');
+            }
+          } catch (vErr) {
+            setError(vErr.response?.data?.message || vErr.message || 'Payment verification failed on the server.');
+          } finally {
+            setRazorpayLoading(false);
+          }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        setRazorpayLoading(false);
+        setError(`Payment Failed: ${resp.error?.description || 'Transaction declined'}. Membership was not activated.`);
+      });
+
+      rzp.open();
+    } catch (err) {
+      console.error('Razorpay Error:', err);
+      setError(err.response?.data?.message || err.message || 'Error launching Razorpay Checkout.');
+      setRazorpayLoading(false);
+    }
+  };
+
+  // Fallback Simulation Registration (Offline / Faculty Demonstration Mode)
   const handleCompleteRegistration = async () => {
     setLoading(true);
     setError('');
@@ -463,33 +573,104 @@ export default function RegisterPage() {
               )}
             </form>
 
-            {/* Payment Method Selection */}
+            {/* Payment Mode Selector: Razorpay Gateway vs Simulation */}
             <div className="mb-6">
-              <label className="text-xs font-semibold text-slate-300 block mb-2">Select Payment Method (Simulation Mode)</label>
-              <div className="grid grid-cols-3 gap-2">
-                {['UPI', 'Card', 'Cash'].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setPaymentMethod(m)}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                      paymentMethod === m
-                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>{m}</span>
-                  </button>
-                ))}
+              <label className="text-xs font-semibold text-slate-300 block mb-2">Select Payment Gateway Mode</label>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode('razorpay')}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    paymentMode === 'razorpay'
+                      ? 'bg-emerald-500/10 border-emerald-500 ring-1 ring-emerald-500/30'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-emerald-400" />
+                      Razorpay Gateway
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                      Test Mode
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">Real cryptographic HMAC-SHA256 signature verification</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentMode('simulation')}
+                  className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    paymentMode === 'simulation'
+                      ? 'bg-emerald-500/10 border-emerald-500 ring-1 ring-emerald-500/30'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      Demo Simulation
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      Offline
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">Instant mock payment for offline faculty reviews</p>
+                </button>
               </div>
-              <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Simulated demo transaction. No actual money is charged.</span>
-              </p>
+
+              {/* Razorpay Test Credentials Helper Box */}
+              {paymentMode === 'razorpay' && (
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-emerald-500/30 mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4" />
+                      Razorpay Test Mode Credentials
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">rzp_test_TqHLmAEv4kbwsP</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Test Card:</span>
+                      <code className="text-emerald-300 font-mono font-bold">4111 1111 1111 1111</code>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Exp: 12/28 • CVV: 123 • OTP: 123456</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Test UPI VPA:</span>
+                      <code className="text-emerald-300 font-mono font-bold">success@razorpay</code>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">Instant sandbox approval</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Simulation Payment Method Selector */}
+              {paymentMode === 'simulation' && (
+                <div className="space-y-2 mb-4">
+                  <label className="text-xs font-semibold text-slate-400 block">Select Demo Method</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['UPI', 'Card', 'Cash'].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPaymentMethod(m)}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          paymentMethod === m
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>{m}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Confirm & Activate */}
+            {/* Confirm & Activate Buttons */}
             <div className="flex gap-3">
               <button
                 type="button"
@@ -498,21 +679,43 @@ export default function RegisterPage() {
               >
                 Back
               </button>
-              <button
-                type="button"
-                onClick={handleCompleteRegistration}
-                disabled={loading}
-                className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-black rounded-xl text-sm transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {loading ? (
-                  <span>Activating Account & Processing Demo Payment...</span>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Confirm Demo Payment (₹{finalTotal.toLocaleString()}) & Activate</span>
-                  </>
-                )}
-              </button>
+
+              {paymentMode === 'razorpay' ? (
+                <button
+                  type="button"
+                  onClick={handleRazorpayCheckout}
+                  disabled={razorpayLoading || loading}
+                  className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-black rounded-xl text-sm transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {razorpayLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Opening Razorpay Gateway...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      <span>Pay ₹{finalTotal.toLocaleString()} with Razorpay & Activate</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCompleteRegistration}
+                  disabled={loading}
+                  className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-black rounded-xl text-sm transition-all shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {loading ? (
+                    <span>Activating Account...</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirm Demo Payment (₹{finalTotal.toLocaleString()}) & Activate</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         )}
