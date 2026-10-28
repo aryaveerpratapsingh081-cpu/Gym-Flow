@@ -88,6 +88,12 @@ const loginUser = async (req, res) => {
  * 5. Full Audit Log Emission.
  */
 const registerUser = async (req, res) => {
+  let createdUserId = null;
+  let createdMemberId = null;
+  let createdMembershipId = null;
+  let createdPaymentId = null;
+  let createdInvoiceId = null;
+
   try {
     const { name, email, password, phone, planId, paymentMethod = 'UPI', couponCode } = req.body;
 
@@ -157,16 +163,23 @@ const registerUser = async (req, res) => {
       phone: phone || '',
       role: 'Member' // Strictly enforce Member role for public registrations!
     });
+    createdUserId = user._id;
 
     // 2. Generate unique Member custom ID (GF-1001+)
     const memberCount = await Member.countDocuments();
-    const customId = `GF-${1001 + memberCount}`;
+    let nextNum = 1001 + memberCount;
+    let customId = `GF-${nextNum}`;
+    while (await Member.findOne({ memberCustomId: customId })) {
+      nextNum++;
+      customId = `GF-${nextNum}`;
+    }
 
     const member = await Member.create({
       user: user._id,
       memberCustomId: customId,
       status: 'Active'
     });
+    createdMemberId = member._id;
 
     // 3. Calculate start & end date
     const startDate = new Date();
@@ -187,6 +200,7 @@ const registerUser = async (req, res) => {
       amountPaid: finalPrice,
       outstandingDues: 0
     });
+    createdMembershipId = membership._id;
 
     // Link current membership to member
     member.currentMembership = membership._id;
@@ -195,7 +209,7 @@ const registerUser = async (req, res) => {
     // 5. Record Payment transaction
     const timestampStr = Date.now().toString().slice(-6);
     const transactionId = `TXN-DEMO-${timestampStr}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${1000 + memberCount}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${timestampStr}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const payment = await Payment.create({
       member: member._id,
@@ -210,9 +224,10 @@ const registerUser = async (req, res) => {
       isDemoPayment: true,
       notes: `Demo online checkout registration for ${plan.name} (${plan.durationMonths} Months)`
     });
+    createdPaymentId = payment._id;
 
     // 6. Generate Invoice
-    await Invoice.create({
+    const invoice = await Invoice.create({
       invoiceNumber: invoiceNo,
       member: member._id,
       payment: payment._id,
@@ -224,6 +239,7 @@ const registerUser = async (req, res) => {
       totalAmount: finalPrice,
       status: 'Paid'
     });
+    createdInvoiceId = invoice._id;
 
     // 7. Audit Log
     await logAudit({
@@ -258,6 +274,17 @@ const registerUser = async (req, res) => {
       }
     });
   } catch (error) {
+    // Safe transactional cleanup on failure
+    try {
+      if (createdInvoiceId) await Invoice.findByIdAndDelete(createdInvoiceId);
+      if (createdPaymentId) await Payment.findByIdAndDelete(createdPaymentId);
+      if (createdMembershipId) await Membership.findByIdAndDelete(createdMembershipId);
+      if (createdMemberId) await Member.findByIdAndDelete(createdMemberId);
+      if (createdUserId) await User.findByIdAndDelete(createdUserId);
+    } catch (cleanupErr) {
+      console.error('Error rolling back registration:', cleanupErr);
+    }
+
     res.status(500).json({ success: false, message: error.message });
   }
 };

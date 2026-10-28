@@ -303,7 +303,7 @@ const verifyRazorpayPayment = async (req, res) => {
     await member.save();
 
     // 7. Record Verified Payment in MongoDB
-    const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
     const payment = await Payment.create({
       member: member._id,
       membership: membership._id,

@@ -50,7 +50,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold mb-6">
             <Sparkles className="w-4 h-4 animate-pulse" />
-            <span>DBMS Lab Review 2 Full-Stack Prototype</span>
+            <span>Enterprise Full-Stack Gym Platform</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight">
@@ -187,7 +187,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-800 py-8 text-center text-xs text-slate-500">
-        <p>GymFlow – Smart Gym Management System • Developed for DBMS Lab Review 2</p>
+        <p>GymFlow – Smart Gym Management System • Final Project</p>
       </footer>
     </div>
   );

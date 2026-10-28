@@ -161,7 +161,12 @@ const convertLeadToMember = async (req, res) => {
 
     // 2. Create Member
     const count = await Member.countDocuments();
-    const customId = `GF-${1001 + count}`;
+    let nextNum = 1001 + count;
+    let customId = `GF-${nextNum}`;
+    while (await Member.findOne({ memberCustomId: customId })) {
+      nextNum++;
+      customId = `GF-${nextNum}`;
+    }
     const member = await Member.create({
       user: user._id,
       memberCustomId: customId,
@@ -191,7 +196,7 @@ const convertLeadToMember = async (req, res) => {
     await member.save();
 
     // 4. Create Payment & Invoice
-    const invoiceNo = `INV-${new Date().getFullYear()}-${1000 + count}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
     const payment = await Payment.create({
       member: member._id,
       membership: membership._id,

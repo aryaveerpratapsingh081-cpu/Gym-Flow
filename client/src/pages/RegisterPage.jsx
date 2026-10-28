@@ -616,7 +616,7 @@ export default function RegisterPage() {
                       Offline
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400">Instant mock payment for offline faculty reviews</p>
+                  <p className="text-[11px] text-slate-400">Instant mock payment for offline demo</p>
                 </button>
               </div>
 

@@ -25,7 +25,11 @@ export default function LoginPage() {
       else if (user.role === 'Trainer') navigate('/trainer/dashboard');
       else navigate('/member/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Invalid credentials');
+      if (!err.response || (err.response.status === 500 && !err.response.data?.message)) {
+        setError('Backend server (port 5000) is unreachable. Please ensure the backend server is running.');
+      } else {
+        setError(err.response?.data?.message || err.message || 'Invalid credentials');
+      }
     } finally {
       setLoading(false);
     }
@@ -34,13 +38,20 @@ export default function LoginPage() {
   const handleQuickAutofill = (demoEmail, demoPassword) => {
     setEmail(demoEmail);
     setPassword(demoPassword);
+    setError('');
     login(demoEmail, demoPassword)
       .then((user) => {
         if (user.role === 'Admin') navigate('/admin/dashboard');
         else if (user.role === 'Trainer') navigate('/trainer/dashboard');
         else navigate('/member/dashboard');
       })
-      .catch((err) => setError(err.message));
+      .catch((err) => {
+        if (!err.response || (err.response.status === 500 && !err.response.data?.message)) {
+          setError('Backend server (port 5000) is unreachable. Please ensure the backend server is running.');
+        } else {
+          setError(err.response?.data?.message || err.message || 'Failed to login');
+        }
+      });
   };
 
   return (
@@ -60,7 +71,7 @@ export default function LoginPage() {
             </span>
           </Link>
           <h2 className="text-xl font-bold text-white">Sign In to GymFlow</h2>
-          <p className="text-xs text-slate-400 mt-1">DBMS Lab Review 2 Smart Management Prototype</p>
+          <p className="text-xs text-slate-400 mt-1">Smart Gym Management System</p>
         </div>
 
         {/* Demo Credentials Quick Autofill Box */}

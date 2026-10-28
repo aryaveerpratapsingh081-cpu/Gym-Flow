@@ -82,7 +82,7 @@ export default function Navbar({ onToggleSidebar }) {
           {showRoleSwitcher && (
             <div className="absolute right-0 mt-2 w-64 bg-[#121721] border border-slate-800 rounded-xl shadow-2xl p-2 z-50">
               <div className="text-[11px] font-semibold text-slate-400 px-2 py-1 border-b border-slate-800 mb-1">
-                Faculty Review Quick Switcher
+                Demo Account Quick Switcher
               </div>
               <button
                 onClick={() => handleRoleSwitch('admin@gymflow.com', 'Admin@123', '/dashboard')}

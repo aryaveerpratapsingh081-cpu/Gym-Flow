@@ -26,7 +26,7 @@ export default function DemoCredentialsBadge({ onQuickLogin }) {
     <div className="bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3.5 text-xs shadow-xl backdrop-blur-md">
       <div className="flex items-center gap-1.5 font-semibold text-emerald-400 mb-2">
         <Sparkles className="w-4 h-4 animate-pulse" />
-        <span>Faculty Review 2 Demo Credentials (Click to Autofill)</span>
+        <span>Demo Login Credentials (Click to Autofill)</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2">

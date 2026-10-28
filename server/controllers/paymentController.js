@@ -28,7 +28,7 @@ const createPayment = async (req, res) => {
 
     const timestamp = Date.now();
     const transactionId = `TXN-${timestamp}-${Math.floor(100 + Math.random() * 900)}`;
-    const invoiceNo = `INV-${new Date().getFullYear()}-${timestamp.toString().slice(-5)}`;
+    const invoiceNo = `INV-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const targetMembership = membershipId || member.currentMembership || null;
 

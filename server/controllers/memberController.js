@@ -146,7 +146,12 @@ const createMember = async (req, res) => {
     });
 
     const count = await Member.countDocuments();
-    const memberCustomId = `GF-${1001 + count}`;
+    let nextNum = 1001 + count;
+    let memberCustomId = `GF-${nextNum}`;
+    while (await Member.findOne({ memberCustomId })) {
+      nextNum++;
+      memberCustomId = `GF-${nextNum}`;
+    }
 
     // Create Member record
     const member = await Member.create({
